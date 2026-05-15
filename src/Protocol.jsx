@@ -575,54 +575,292 @@ function TabBar({ tab, setTab }) {
 }
 
 // ============ ONBOARDING ============
+// Goal plan presets — each defines a deficit and what it's optimized for
+const GOAL_PLANS = [
+  {
+    id: 'recomp',
+    label: 'Recomp',
+    deficit: 100,
+    weeklyLoss: 0.2,
+    blurb: 'Slow lean-out. Prioritize strength and lifting gains. Best if you have time and want zero performance compromise.',
+  },
+  {
+    id: 'steady',
+    label: 'Steady cut',
+    deficit: 350,
+    weeklyLoss: 0.7,
+    blurb: 'The sustainable middle ground. Recommended for athletes leaning out without losing strength or compromising training.',
+    recommended: true,
+  },
+  {
+    id: 'aggressive',
+    label: 'Aggressive cut',
+    deficit: 600,
+    weeklyLoss: 1.2,
+    blurb: 'Faster timeline. Higher risk to lean mass. Use only short-term and watch HRV closely.',
+  },
+  {
+    id: 'maintain',
+    label: 'Maintain',
+    deficit: 0,
+    weeklyLoss: 0,
+    blurb: 'Hold current body comp. Fuel performance. Use during heavy training blocks, taper weeks, or competition.',
+  },
+];
+
 function Onboarding({ onSave }) {
+  const [step, setStep] = useState(1); // 1: weight, 2: whoop, 3: plan
   const [weight, setWeight] = useState('');
-  const [maintenance, setMaintenance] = useState('');
-  const [deficit, setDeficit] = useState('350');
+  const [whoopConnected, setWhoopConnected] = useState(false);
+  const [whoopBurn, setWhoopBurn] = useState(null); // avg from last 7 days
+  const [manualMaintenance, setManualMaintenance] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState('steady');
+  const [checking, setChecking] = useState(false);
+
+  // On mount and when returning from OAuth, check connection status
+  useEffect(() => {
+    (async () => {
+      setChecking(true);
+      const status = await fetchWhoopStatus();
+      setWhoopConnected(!!status.connected);
+
+      // Handle OAuth redirect during onboarding
+      const params = new URLSearchParams(window.location.search);
+      const whoopFlag = params.get('whoop');
+      if (whoopFlag === 'connected') {
+        setWhoopConnected(true);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setStep(2); // make sure we're on the Whoop step
+      }
+
+      // If connected, fetch recent burn to auto-suggest maintenance
+      if (status.connected) {
+        try {
+          const { rows } = await fetchWhoopSync(7);
+          const burns = (rows || []).map(r => r.burn).filter(b => b && b > 1000);
+          if (burns.length > 0) {
+            const avg = burns.reduce((s, b) => s + b, 0) / burns.length;
+            setWhoopBurn(Math.round(avg));
+          }
+        } catch {}
+      }
+      setChecking(false);
+    })();
+  }, []);
+
+  const handleFinish = () => {
+    const plan = GOAL_PLANS.find(p => p.id === selectedPlan) || GOAL_PLANS[1];
+    const maintenance = whoopBurn || parseFloat(manualMaintenance) || (parseFloat(weight) * 16);
+    onSave({
+      weightLbs: parseFloat(weight),
+      maintenance,
+      deficit: plan.deficit,
+      planId: plan.id,
+    });
+  };
 
   return (
     <div style={S.app}>
       <div style={{padding: '60px 24px 40px'}}>
         <div style={{...S.brand, fontSize: 28, marginBottom: 8}}>protocol<span style={{color: 'var(--accent)', fontStyle: 'italic'}}>.</span></div>
-        <div style={{color: 'var(--text-dim)', fontSize: 14, marginBottom: 40}}>Lean phase tracking, recovery-aware.</div>
+        <div style={{color: 'var(--text-dim)', fontSize: 14, marginBottom: 8}}>Lean phase tracking, recovery-aware.</div>
 
-        <div style={{marginBottom: 24}}>
-          <label style={S.fieldLabel}>Body weight</label>
-          <div style={S.inputWrap}>
-            <input style={S.input} type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="180" />
-            <span style={S.inputSuffix}>lbs</span>
-          </div>
+        {/* Step indicator */}
+        <div style={{display: 'flex', gap: 6, marginBottom: 32, marginTop: 24}}>
+          {[1, 2, 3].map(n => (
+            <div key={n} style={{
+              flex: 1, height: 3, borderRadius: 2,
+              background: step >= n ? 'var(--accent)' : 'var(--line-bright)',
+              transition: 'background 0.2s',
+            }} />
+          ))}
         </div>
 
-        <div style={{marginBottom: 24}}>
-          <label style={S.fieldLabel}>Maintenance calories</label>
-          <div style={S.fieldHint}>Your TDEE on a normal training day. If unsure, start with bodyweight × 16.</div>
-          <div style={S.inputWrap}>
-            <input style={S.input} type="number" value={maintenance} onChange={e => setMaintenance(e.target.value)} placeholder="2900" />
-            <span style={S.inputSuffix}>kcal</span>
-          </div>
-        </div>
+        {/* STEP 1: Weight */}
+        {step === 1 && (
+          <>
+            <div style={{fontFamily: 'var(--display)', fontSize: 26, fontWeight: 400, fontStyle: 'italic', marginBottom: 8, letterSpacing: '-0.02em'}}>
+              What's your weight?
+            </div>
+            <div style={{color: 'var(--text-dim)', fontSize: 13, marginBottom: 28, lineHeight: 1.5}}>
+              Used for your protein target (1g per lb to protect lean mass while cutting).
+            </div>
 
-        <div style={{marginBottom: 32}}>
-          <label style={S.fieldLabel}>Daily deficit (green-day target)</label>
-          <div style={S.fieldHint}>250–400 protects lean mass. Auto-reduces on yellow/red recovery.</div>
-          <div style={S.inputWrap}>
-            <input style={S.input} type="number" value={deficit} onChange={e => setDeficit(e.target.value)} placeholder="350" />
-            <span style={S.inputSuffix}>kcal</span>
-          </div>
-        </div>
+            <div style={{marginBottom: 28}}>
+              <label style={S.fieldLabel}>Body weight</label>
+              <div style={S.inputWrap}>
+                <input style={S.input} type="number" inputMode="decimal" value={weight} onChange={e => setWeight(e.target.value)} placeholder="180" autoFocus />
+                <span style={S.inputSuffix}>lbs</span>
+              </div>
+            </div>
 
-        <button
-          style={{...S.primaryBtn, opacity: (weight && maintenance) ? 1 : 0.4}}
-          disabled={!weight || !maintenance}
-          onClick={() => onSave({
-            weightLbs: parseFloat(weight),
-            maintenance: parseFloat(maintenance),
-            deficit: parseFloat(deficit) || 350,
-          })}
-        >
-          Begin <ChevronRight size={18} />
-        </button>
+            <button
+              style={{...S.primaryBtn, width: '100%', opacity: weight ? 1 : 0.4}}
+              disabled={!weight}
+              onClick={() => setStep(2)}
+            >
+              Continue <ChevronRight size={18} />
+            </button>
+          </>
+        )}
+
+        {/* STEP 2: Whoop */}
+        {step === 2 && (
+          <>
+            <div style={{fontFamily: 'var(--display)', fontSize: 26, fontWeight: 400, fontStyle: 'italic', marginBottom: 8, letterSpacing: '-0.02em'}}>
+              Connect Whoop
+            </div>
+            <div style={{color: 'var(--text-dim)', fontSize: 13, marginBottom: 28, lineHeight: 1.5}}>
+              Whoop tells us your actual daily energy burn, so your target adjusts to what you actually trained. Without it, we estimate.
+            </div>
+
+            {checking ? (
+              <div style={{textAlign: 'center', padding: 40}}>
+                <Loader2 size={20} style={{animation: 'spin 1s linear infinite', color: 'var(--accent)'}} />
+              </div>
+            ) : whoopConnected ? (
+              <>
+                <div style={{...S.targetCard, padding: '18px 20px', marginBottom: 16}}>
+                  <div style={S.targetCardGlow} />
+                  <div style={{position: 'relative', zIndex: 1}}>
+                    <div style={{fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.15em', color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6}}>
+                      ● Connected
+                    </div>
+                    {whoopBurn ? (
+                      <>
+                        <div style={{fontSize: 14, color: 'var(--text)', marginBottom: 4}}>
+                          7-day avg burn: <span style={{fontFamily: 'var(--mono)', fontWeight: 600}}>{whoopBurn.toLocaleString()} kcal</span>
+                        </div>
+                        <div style={{fontSize: 12, color: 'var(--text-dim)'}}>
+                          This is your true maintenance. Your daily target uses your actual burn each day.
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{fontSize: 13, color: 'var(--text-dim)'}}>
+                        Pulling your recent data...
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setStep(3)} style={{...S.primaryBtn, width: '100%'}}>
+                  Continue <ChevronRight size={18} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => { window.location.href = '/api/whoop/auth-url'; }}
+                  style={{...S.primaryBtn, width: '100%', marginBottom: 12}}
+                >
+                  <Activity size={16} /> Connect Whoop
+                </button>
+                <div style={{marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--line)'}}>
+                  <div style={{fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 10}}>
+                    Or skip — enter manually
+                  </div>
+                  <div style={S.fieldHint}>Your estimated maintenance calories (TDEE) on a normal day.</div>
+                  <div style={S.inputWrap}>
+                    <input
+                      style={S.input}
+                      type="number"
+                      inputMode="numeric"
+                      value={manualMaintenance}
+                      onChange={e => setManualMaintenance(e.target.value)}
+                      placeholder={weight ? String(Math.round(parseFloat(weight) * 16)) : '2900'}
+                    />
+                    <span style={S.inputSuffix}>kcal</span>
+                  </div>
+                  <div style={{fontSize: 11, color: 'var(--text-faint)', marginTop: 6}}>
+                    Rough estimate: weight × 16 = {weight ? Math.round(parseFloat(weight) * 16).toLocaleString() : '—'} kcal
+                  </div>
+                  <button
+                    onClick={() => setStep(3)}
+                    disabled={!manualMaintenance}
+                    style={{...S.secondaryBtn, width: '100%', marginTop: 14, opacity: manualMaintenance ? 1 : 0.4}}
+                  >
+                    Continue without Whoop
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* STEP 3: Pick plan */}
+        {step === 3 && (
+          <>
+            <div style={{fontFamily: 'var(--display)', fontSize: 26, fontWeight: 400, fontStyle: 'italic', marginBottom: 8, letterSpacing: '-0.02em'}}>
+              Pick your angle
+            </div>
+            <div style={{color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.5}}>
+              Each plan sets your default deficit. Recovery and strain still scale daily on top. You can change plans anytime.
+            </div>
+
+            <div style={{display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20}}>
+              {GOAL_PLANS.map(plan => {
+                const isSelected = selectedPlan === plan.id;
+                return (
+                  <button
+                    key={plan.id}
+                    onClick={() => setSelectedPlan(plan.id)}
+                    style={{
+                      textAlign: 'left',
+                      background: isSelected ? 'rgba(212,255,63,0.05)' : 'var(--bg-elev)',
+                      border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--line)'}`,
+                      borderRadius: 14,
+                      padding: '14px 16px',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--sans)',
+                      color: 'var(--text)',
+                      transition: 'all 0.15s',
+                      position: 'relative',
+                    }}
+                  >
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6}}>
+                      <div style={{display: 'flex', alignItems: 'baseline', gap: 8}}>
+                        <span style={{fontWeight: 600, fontSize: 15}}>{plan.label}</span>
+                        {plan.recommended && (
+                          <span style={{
+                            fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.12em',
+                            color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 600,
+                          }}>recommended</span>
+                        )}
+                      </div>
+                      <div style={{fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-dim)'}}>
+                        {plan.deficit > 0 ? `−${plan.deficit}` : '±0'} kcal · {plan.weeklyLoss > 0 ? `~${plan.weeklyLoss} lb/wk` : 'no loss'}
+                      </div>
+                    </div>
+                    <div style={{fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4}}>
+                      {plan.blurb}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              style={{...S.primaryBtn, width: '100%'}}
+              onClick={handleFinish}
+            >
+              Begin <ChevronRight size={18} />
+            </button>
+          </>
+        )}
+
+        {/* Back button (steps 2+) */}
+        {step > 1 && (
+          <button
+            onClick={() => setStep(step - 1)}
+            style={{
+              background: 'none', border: 'none', color: 'var(--text-faint)',
+              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.15em',
+              textTransform: 'uppercase', cursor: 'pointer', padding: 0,
+              marginTop: 20, fontWeight: 600,
+            }}
+          >
+            ← Back
+          </button>
+        )}
       </div>
       <GlobalStyles />
     </div>
@@ -2057,14 +2295,27 @@ function TrendCard({ label, value, unit, period, goodWhen }) {
 function SettingsView({ profile, savedMeals, onSave, onDeleteSaved }) {
   const [weight, setWeight] = useState(String(profile.weightLbs || ''));
   const [maintenance, setMaintenance] = useState(String(profile.maintenance || ''));
-  const [deficit, setDeficit] = useState(String(profile.deficit || 350));
+  // Match plan id from saved profile, fallback to closest by deficit, default to 'steady'
+  const initialPlan = profile.planId || (() => {
+    const d = profile.deficit || 350;
+    let best = GOAL_PLANS[1];
+    let bestDiff = Math.abs(best.deficit - d);
+    for (const p of GOAL_PLANS) {
+      const diff = Math.abs(p.deficit - d);
+      if (diff < bestDiff) { best = p; bestDiff = diff; }
+    }
+    return best.id;
+  })();
+  const [planId, setPlanId] = useState(initialPlan);
   const [saved, setSaved] = useState(false);
 
   const save = async () => {
+    const plan = GOAL_PLANS.find(p => p.id === planId) || GOAL_PLANS[1];
     await onSave({
       weightLbs: parseFloat(weight),
       maintenance: parseFloat(maintenance),
-      deficit: parseFloat(deficit),
+      deficit: plan.deficit,
+      planId: plan.id,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -2072,6 +2323,40 @@ function SettingsView({ profile, savedMeals, onSave, onDeleteSaved }) {
 
   return (
     <div style={S.view}>
+      <div style={S.sectionLabel}>Plan</div>
+
+      <div style={{display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24}}>
+        {GOAL_PLANS.map(plan => {
+          const isSelected = planId === plan.id;
+          return (
+            <button
+              key={plan.id}
+              onClick={() => setPlanId(plan.id)}
+              style={{
+                textAlign: 'left',
+                background: isSelected ? 'rgba(212,255,63,0.05)' : 'var(--bg-elev)',
+                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--line)'}`,
+                borderRadius: 12,
+                padding: '12px 14px',
+                cursor: 'pointer',
+                fontFamily: 'var(--sans)',
+                color: 'var(--text)',
+              }}
+            >
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4}}>
+                <span style={{fontWeight: 600, fontSize: 14}}>{plan.label}</span>
+                <span style={{fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)'}}>
+                  {plan.deficit > 0 ? `−${plan.deficit}` : '±0'} kcal · {plan.weeklyLoss > 0 ? `~${plan.weeklyLoss} lb/wk` : 'no loss'}
+                </span>
+              </div>
+              <div style={{fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.4}}>
+                {plan.blurb}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
       <div style={S.sectionLabel}>Profile</div>
 
       <div style={{marginBottom: 18}}>
@@ -2082,20 +2367,11 @@ function SettingsView({ profile, savedMeals, onSave, onDeleteSaved }) {
         </div>
       </div>
 
-      <div style={{marginBottom: 18}}>
+      <div style={{marginBottom: 24}}>
         <label style={S.fieldLabel}>Maintenance calories <span style={{color: 'var(--text-faint)', fontSize: 9, marginLeft: 4}}>(FALLBACK)</span></label>
-        <div style={S.fieldHint}>Used only when Whoop data isn't available for the day.</div>
+        <div style={S.fieldHint}>Used only when Whoop data isn't available for the day. Whoop's actual daily burn is used when synced.</div>
         <div style={S.inputWrap}>
           <input style={S.input} type="number" value={maintenance} onChange={e => setMaintenance(e.target.value)} />
-          <span style={S.inputSuffix}>kcal</span>
-        </div>
-      </div>
-
-      <div style={{marginBottom: 24}}>
-        <label style={S.fieldLabel}>Daily deficit</label>
-        <div style={S.fieldHint}>Subtracted from each day's actual burn. Auto-reduces on yellow/red recovery.</div>
-        <div style={S.inputWrap}>
-          <input style={S.input} type="number" value={deficit} onChange={e => setDeficit(e.target.value)} />
           <span style={S.inputSuffix}>kcal</span>
         </div>
       </div>
@@ -2178,6 +2454,7 @@ const S = {
     backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
     borderTop: '1px solid var(--line)',
     display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', zIndex: 100,
+    paddingBottom: 'env(safe-area-inset-bottom)',
   },
   tab: {
     background: 'none', border: 'none', padding: '14px 4px',
@@ -2575,6 +2852,7 @@ function GlobalStyles() {
         margin: 0; background: var(--bg); color: var(--text);
         font-family: var(--sans); -webkit-font-smoothing: antialiased;
         max-width: 480px; margin-left: auto; margin-right: auto;
+        padding-bottom: calc(72px + env(safe-area-inset-bottom));
       }
       input:focus { border-color: var(--accent) !important; }
       button:active { transform: scale(0.98); }
