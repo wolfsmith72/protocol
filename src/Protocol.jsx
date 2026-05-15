@@ -1589,12 +1589,12 @@ function RecoveryView({ whoop, sheetUrl, lastSync, syncing, onSaveSheetUrl, onSy
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12}}>
           <div style={{flex: 1, minWidth: 0}}>
             <div style={{fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.15em', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4}}>
-              {sheetUrl ? 'Auto-sync via Sheet' : 'Connect Whoop via Zapier'}
+              {sheetUrl ? 'Auto-sync via Sheet' : 'Connect Whoop'}
             </div>
             <div style={{fontSize: 13, color: sheetUrl ? 'var(--text)' : 'var(--text-dim)', lineHeight: 1.4}}>
               {sheetUrl
-                ? 'Pulls fresh recovery data from your Google Sheet on every open.'
-                : 'Set up Zapier to push Whoop recovery into a Sheet. Then connect it here for hands-free updates.'}
+                ? 'Pulls fresh recovery + calorie burn from your Google Sheet on every open.'
+                : 'Pipe Whoop → Google Sheet (via Make.com, free). Connect it here for hands-free daily updates.'}
             </div>
           </div>
           <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
@@ -1786,24 +1786,24 @@ function SheetSetupModal({ currentUrl, onClose, onSave, onShowHelp }) {
 
 function ZapierHelpModal({ onClose, onConnect }) {
   const steps = [
-    { n: '01', t: 'Make a Google Sheet', d: 'Name it "Whoop Recovery". Add these column headers in row 1, exactly: Date, Recovery, HRV, RHR, Strain, Sleep' },
-    { n: '02', t: 'Open the Sheet share menu', d: 'Click Share → General access → "Anyone with the link" → Viewer. Copy the link, you\'ll need it last.' },
-    { n: '03', t: 'Create a Zapier zap', d: 'Trigger: Whoop → "New Recovery". Action: Google Sheets → "Create Spreadsheet Row". Map Whoop fields to your columns.' },
-    { n: '04', t: 'Field mapping', d: 'Date → Cycle Start, Recovery → Recovery Score, HRV → HRV, RHR → Resting HR, Strain → leave or add later.' },
-    { n: '05', t: 'Turn the zap on', d: 'It\'ll fire each morning when Whoop publishes your recovery (~6 AM). New row added automatically.' },
-    { n: '06', t: 'Paste the link here', d: 'Come back, hit Connect, paste your Sheet URL. Done.' },
+    { n: '01', t: 'Copy the template Sheet', d: 'Visit github.com/pelo-tech/whoop-google-sheets. Follow their README to make a copy of the template Google Sheet into your own Drive. It comes pre-wired with the right columns and the Apps Script attached.' },
+    { n: '02', t: 'Enter your Whoop login', d: 'On the Sheet\'s "Config" tab, paste your Whoop email + password (stays in your own Sheet, never leaves Google). Run the auth function from the menu — this gets your access token.' },
+    { n: '03', t: 'Run the sync', d: 'From the Sheet menu: Whoop → Sync. Pulls the last ~30 days of cycles: recovery, HRV, RHR, strain, sleep, and calorie burn.' },
+    { n: '04', t: 'Set a daily trigger', d: 'In the Apps Script editor, add a time-based trigger: run sync() daily at 7 AM. Now your Sheet auto-updates every morning.' },
+    { n: '05', t: 'Share for read access', d: 'Sheet → Share → General access → "Anyone with the link" → Viewer. Copy the link.' },
+    { n: '06', t: 'Paste the Sheet URL here', d: 'Come back, hit Connect, paste your Sheet URL. Protocol auto-pulls from it on every open.' },
   ];
 
   return (
     <div style={S.modal}>
       <div style={{...S.modalContent, maxHeight: '92vh'}}>
         <div style={S.modalHeader}>
-          <div style={S.modalTitle}>Zapier setup</div>
+          <div style={S.modalTitle}>Whoop auto-sync setup</div>
           <button onClick={onClose} style={S.iconBtn}><X size={18} /></button>
         </div>
         <div style={{padding: '0 24px 28px'}}>
           <div style={{color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, lineHeight: 1.5}}>
-            One-time setup. ~10 minutes. After this, recovery flows in automatically every morning.
+            One-time setup, ~15 min. Uses the open-source <strong style={{color: 'var(--text)'}}>pelo-tech/whoop-google-sheets</strong> project — a Google Apps Script that pulls your Whoop data directly into a Sheet. <strong style={{color: 'var(--text)'}}>Completely free</strong>, no Zapier/Make required.
           </div>
           {steps.map(s => (
             <div key={s.n} style={{display: 'flex', gap: 14, marginBottom: 18, paddingBottom: 18, borderBottom: '1px solid var(--line)'}}>
@@ -1823,8 +1823,8 @@ function ZapierHelpModal({ onClose, onConnect }) {
             borderRadius: 10, padding: 14, fontSize: 12,
             color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 20,
           }}>
-            <div style={{color: 'var(--accent)', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 600}}>Note</div>
-            Whoop's Zapier integration requires a paid Zapier plan ($20/mo) since "New Recovery" is a Premium trigger. If you don't want that, the manual CSV import works fine — takes 30 seconds.
+            <div style={{color: 'var(--accent)', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 600}}>Heads up</div>
+            Whoop's "Energy burned" comes through as a value the app already knows how to parse. After step 3, check that your Sheet has a column with calorie burn data — that's what drives the per-day target.
           </div>
           <button onClick={onConnect} style={{...S.primaryBtn, width: '100%'}}>
             I'm ready, paste my Sheet URL <ChevronRight size={16} />
