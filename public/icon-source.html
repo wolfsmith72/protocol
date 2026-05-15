@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Protocol Icon Generator</title>
+<style>
+  body {
+    background: #1a1a1a;
+    color: #f4f4f2;
+    font-family: -apple-system, sans-serif;
+    padding: 40px;
+    margin: 0;
+  }
+  h1 { font-weight: 400; letter-spacing: -0.02em; }
+  .icons { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
+  .icon-wrap { text-align: center; }
+  .icon-wrap canvas { display: block; }
+  .label { font-size: 12px; color: #8b9098; margin-top: 8px; font-family: ui-monospace, monospace; }
+  button {
+    background: #d4ff3f; color: #0a0b0d; border: none; padding: 12px 20px;
+    border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    font-family: inherit; font-size: 13px;
+  }
+  .note { color: #8b9098; max-width: 600px; line-height: 1.5; margin-top: 16px; }
+  code { background: #2a2f36; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Protocol icon generator</h1>
+<p class="note">
+  These icons are drawn on canvas with the Protocol brand mark — a clean wordmark-style "P" on the dark background.
+  Click each <strong>Download</strong> button to save the PNG. Drop all three in <code>public/</code>.
+</p>
+<p class="note">
+  Want to customize? Edit the <code>drawIcon</code> function below in the HTML source. Once you've designed the
+  Ravioli/Elthi visual systems, you'll probably want to redo this in Figma anyway — but this gets you shipped today.
+</p>
+
+<div class="icons">
+  <div class="icon-wrap">
+    <canvas id="c180" width="180" height="180"></canvas>
+    <div class="label">icon-180.png · iOS</div>
+    <button onclick="download(180)">Download</button>
+  </div>
+  <div class="icon-wrap">
+    <canvas id="c192" width="192" height="192"></canvas>
+    <div class="label">icon-192.png · PWA</div>
+    <button onclick="download(192)">Download</button>
+  </div>
+  <div class="icon-wrap">
+    <canvas id="c512" width="512" height="512"></canvas>
+    <div class="label">icon-512.png · PWA</div>
+    <button onclick="download(512)">Download</button>
+  </div>
+</div>
+
+<script>
+function drawIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+
+  // Background with subtle radial glow
+  ctx.fillStyle = '#0a0b0d';
+  ctx.fillRect(0, 0, size, size);
+
+  const gradient = ctx.createRadialGradient(size * 0.7, size * 0.2, 0, size * 0.7, size * 0.2, size);
+  gradient.addColorStop(0, 'rgba(212, 255, 63, 0.18)');
+  gradient.addColorStop(0.5, 'rgba(212, 255, 63, 0.04)');
+  gradient.addColorStop(1, 'rgba(212, 255, 63, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  // Outer ring (progress-bar style)
+  ctx.strokeStyle = '#1f2328';
+  ctx.lineWidth = size * 0.025;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.38, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Accent arc (showing progress)
+  ctx.strokeStyle = '#d4ff3f';
+  ctx.lineWidth = size * 0.025;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.38, -Math.PI / 2, Math.PI * 0.85);
+  ctx.stroke();
+
+  // Centered "P" in serif italic (Fraunces-style)
+  ctx.fillStyle = '#f4f4f2';
+  ctx.font = `500 italic ${size * 0.48}px "Fraunces", "Times New Roman", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('p', size / 2, size / 2 + size * 0.02);
+
+  // Accent dot
+  ctx.fillStyle = '#d4ff3f';
+  ctx.beginPath();
+  ctx.arc(size * 0.66, size * 0.66, size * 0.03, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+drawIcon(document.getElementById('c180'));
+drawIcon(document.getElementById('c192'));
+drawIcon(document.getElementById('c512'));
+
+function download(size) {
+  const canvas = document.getElementById('c' + size);
+  const link = document.createElement('a');
+  link.download = `icon-${size}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+</body>
+</html>
